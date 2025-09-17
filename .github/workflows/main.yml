@@ -21,6 +21,10 @@ jobs:
         tar xf wasi-sdk.tar.gz
         echo "WASI_SDK_PATH=`pwd`/wasi-sdk-27.0-x86_64-linux" >> $GITHUB_ENV
       working-directory: ${{ runner.tool_cache }}
+    - name: Setup `wasmtime`
+      uses: bytecodealliance/actions/wasm-tools/setup@v1
+      with:
+        version: "1.239.0"
     - run: |
         cat >test.wit <<-EOF
         package my:test;
@@ -35,6 +39,7 @@ jobs:
         end
         EOF
     - run: cargo run ./test.wit -o lua.wasm
+    - run: wasm-tools validate lua.wasm
   rustfmt:
     name: Rustfmt
     runs-on: ubuntu-latest
