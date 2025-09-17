@@ -1,0 +1,19 @@
+[package]
+name = "lua-component-demo"
+version = "0.1.0"
+edition = "2024"
+publish = false
+
+[workspace]
+members = ['crates/runtime']
+
+[dependencies]
+anyhow = "1.0.99"
+clap = { version = "4.5.47", features = ["derive"] }
+wit-parser = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wit-component = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wit-dylib = { git = 'https://github.com/bytecodealliance/wasm-tools' }
+wasi-preview1-component-adapter-provider = "36.0.2"
+
+[patch.crates-io]
+lua-src = { git = 'https://github.com/mlua-rs/lua-src-rs' }

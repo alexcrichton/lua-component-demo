@@ -1,0 +1,45 @@
+name: CI
+on: [pull_request, push]
+
+# Cancel any in-flight jobs for the same PR/branch so there's only one active
+# at a time
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v5
+      with:
+        submodules: true
+    - run: rustup target add wasm32-wasip2
+    - run: |
+        cat >test.wit <<-EOF
+        package my:test;
+
+        world test {
+          export run: func(x: string);
+        }
+        EOF
+        cat >main.lua <<-EOF
+        function run(s)
+          print('Hello ' .. s .. '!')
+        end
+        EOF
+    - run: cargo run ./test.wit -o lua.wasm
+  rustfmt:
+    name: Rustfmt
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - name: Install Rust
+      run: rustup update stable && rustup default stable && rustup component add rustfmt
+    - name: Format source code
+      run: cargo fmt -- --check
