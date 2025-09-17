@@ -7,10 +7,6 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-defaults:
-  run:
-    shell: bash
-
 jobs:
   test:
     name: Test
@@ -20,6 +16,11 @@ jobs:
       with:
         submodules: true
     - run: rustup target add wasm32-wasip2
+    - run: |
+        curl -L -o wasi-sdk.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-27/wasi-sdk-27.0-x86_64-linux.tar.gz
+        tar xf wasi-sdk.tar.gz
+        echo "WASI_SDK_PATH=`pwd`/wasi-sdk-27.0-x86_64-linux" >> $GITHUB_ENV
+      working-directory: ${{ runner.tool_cache }}
     - run: |
         cat >test.wit <<-EOF
         package my:test;
