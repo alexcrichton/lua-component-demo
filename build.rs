@@ -7,7 +7,7 @@ fn main() {
     let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
     let target = "wasm32-wasip2";
     let upcase = target.to_uppercase().replace("-", "_");
-    let debug = true;
+    let debug = std::env::var("OPT_LEVEL").unwrap() == "0";
 
     println!("cargo:rerun-if-changed=./crates/runtime");
 

@@ -39,6 +39,7 @@ jobs:
         end
         EOF
     - run: cargo run ./test.wit -o lua.wasm
+    - run: cargo run --release ./test.wit -o lua.wasm
     - run: wasm-tools validate lua.wasm
   rustfmt:
     name: Rustfmt
