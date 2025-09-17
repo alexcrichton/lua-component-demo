@@ -6,7 +6,7 @@ used here are:
 * Lua - either 5.{1,2,3,4} through the [`lua-src` crate]
 * [`mlua`] - Rust bindings to the Lua C API
 * [`wasi-sdk`] - C toolchain to compile Lua
-* [`wasm-tools wit-dylib`] - hooks up components to the Lua interpreter
+* [`wasm-tools wit-dylib`][`wit-dylib`] - hooks up components to the Lua interpreter
 * [`wasm-tools component link`] - assembles libraries into a single component.
 
 The end result is that you're able to do something like this:
