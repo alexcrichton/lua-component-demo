@@ -225,7 +225,10 @@ impl Interpreter for LuaWit {
     type CallCx<'a> = Call<'a>;
 
     fn initialize(wit: Wit) {
-        state().initialize(wit).expect("failed to initialize");
+        if let Err(e) = state().initialize(wit) {
+            eprintln!("failed to initialize: {e}");
+            std::process::exit(1);
+        }
     }
 
     fn export_start<'a>(_: Wit, _: Function) -> Box<Self::CallCx<'a>> {
