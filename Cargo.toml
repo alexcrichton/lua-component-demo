@@ -14,6 +14,3 @@ wit-parser = { git = 'https://github.com/bytecodealliance/wasm-tools' }
 wit-component = { git = 'https://github.com/bytecodealliance/wasm-tools' }
 wit-dylib = { git = 'https://github.com/bytecodealliance/wasm-tools' }
 wasi-preview1-component-adapter-provider = "36.0.2"
-
-[patch.crates-io]
-lua-src = { git = 'https://github.com/mlua-rs/lua-src-rs' }

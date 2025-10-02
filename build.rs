@@ -22,10 +22,6 @@ fn main() {
         // sysroot.
         rustflags.push("-Clink-self-contained=n");
 
-        // FIXME(rust-lang/rust#146457) this shouldn't be required
-        rustflags.push("-Ctarget-feature=+exception-handling");
-        rustflags.push("-Cllvm-args=-wasm-use-legacy-eh=false");
-
         let mut cargo = Command::new("cargo");
         cargo
             .arg("build")
