@@ -1,0 +1,6 @@
+package my:test;
+
+world test {
+  include wasi:cli/imports@0.2.7;
+  export run: func(x: string);
+}

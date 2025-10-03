@@ -23,26 +23,13 @@ jobs:
         echo "WASI_SDK_PATH=`pwd`/wasi-sdk-27.0-x86_64-linux" >> $GITHUB_ENV
       working-directory: ${{ runner.tool_cache }}
     - name: Setup `wasmtime`
-      uses: bytecodealliance/actions/wasm-tools/setup@v1
+      uses: bytecodealliance/actions/wasmtime/setup@v1
       with:
-        version: "1.239.0"
-    - run: |
-        cat >test.wit <<-EOF
-        package my:test;
-
-        world test {
-          export run: func(x: string);
-        }
-        EOF
-        cat >main.lua <<-EOF
-        function run(s)
-          print('Hello ' .. s .. '!')
-        end
-        EOF
-    - run: cargo run ./test.wit -o lua.wasm
-    - run: wasm-tools validate lua.wasm
-    - run: cargo run --release ./test.wit -o lua.wasm
-    - run: wasm-tools validate lua.wasm
+        version: "dev"
+    - run: cargo run ./test/wit -o test/lua.wasm
+    - run: wasmtime -Sinherit-network,allow-ip-name-lookup --dir test::. -W exceptions --invoke 'run("a")' test/lua.wasm
+    - run: cargo run --release ./test/wit -o test/lua.wasm
+    - run: wasmtime -Sinherit-network,allow-ip-name-lookup --dir test::. -W exceptions --invoke 'run("a")' test/lua.wasm
   rustfmt:
     name: Rustfmt
     runs-on: ubuntu-latest
