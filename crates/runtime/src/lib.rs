@@ -4,6 +4,7 @@ use std::alloc;
 use std::collections::HashMap;
 use std::mem;
 use std::num::NonZeroU32;
+use std::path::Path;
 use std::sync::{LazyLock, Mutex};
 use wit_dylib_ffi::{
     Enum, Flags, Function, Future, Interpreter, List, Record, Resource, Stream, Tuple, Type,
@@ -88,8 +89,8 @@ impl State {
             }
         }
 
-        let file = std::fs::read_to_string("main.lua").expect("failed to read `main.lua`");
-        self.lua.load(&file).exec()?;
+        // let file = std::fs::read_to_string("main.lua").expect("failed to read `main.lua`");
+        self.lua.load(Path::new("./main.lua")).exec()?;
         Ok(())
     }
 
@@ -103,9 +104,12 @@ impl State {
             table.set(ty.name().to_upper_camel_case(), luaty)?;
         }
         for ty in interface.enums.iter() {
-            let luaty = self.lua.create_table()?;
+            let luaty = self
+                .lua
+                .create_table_with_capacity(ty.names().len(), ty.names().len())?;
             for (i, name) in ty.names().enumerate() {
-                luaty.set(name.to_upper_camel_case(), i)?;
+                luaty.set(name.to_upper_camel_case(), i + 1)?;
+                luaty.set(i + 1, name)?;
             }
             table.set(ty.name().to_upper_camel_case(), luaty)?;
         }
@@ -231,11 +235,108 @@ impl mlua::LuaNativeFn<mlua::Variadic<Value>> for Import {
         stack.stack.reverse();
 
         self.func.call_import_sync(&mut stack);
-        if self.func.result().is_some() {
-            Ok(stack.stack.pop().unwrap())
-        } else {
-            Ok(Value::Nil)
+        let result_ty = match self.func.result() {
+            Some(ty) => ty,
+            None => return Ok(Value::Nil),
+        };
+        let val = stack.stack.pop().unwrap();
+        drop(stack);
+        let result_ty = match result_ty {
+            Type::Result(ty) => ty,
+            _ => return Ok(val),
+        };
+
+        maybe_raise_lua_error(val, result_ty)
+    }
+}
+
+fn maybe_raise_lua_error(val: Value, ty: WitResult) -> mlua::Result<Value> {
+    // TODO: Ideally what I was hoping is that a function which returned
+    // `result<_, err>` in WIT would raise `err` as a lua error, but I can't
+    // figure out how to customize the value raised using `mlua`. Specifically
+    // it looks like the error raised is always a `userdata` of a
+    // `WrappedFailure` internal to mlua that can't be customized through the
+    // embedder API. That means that it's not possible to communicate, for
+    // example, an error code but only a string. So for now just return the
+    // `val` as-is.
+    if true {
+        return Ok(val);
+    }
+    let error_value = match LuaVariant::from(ty) {
+        // The result is nullable, and the `ok` case is the null case. If the
+        // value is non-nil then that's the error.
+        LuaVariant::Nullable { null_discr: 0, .. } => match val {
+            Value::Nil => return Ok(val),
+            other => other,
+        },
+
+        // The result is nullable, and the `err` case is the null case. If the
+        // value is non-nil then that's the success, and nil means error.
+        // Return a custom error in the `nil` case.
+        LuaVariant::Nullable { .. } => match val {
+            Value::Nil => Value::Nil,
+            other => return Ok(other),
+        },
+
+        // If the err payload matches `val`, then this is an error, otherwise
+        // it's an `ok` value so return it.
+        LuaVariant::Payload(types) => {
+            if types[1].matches(&val) {
+                val
+            } else {
+                return Ok(val);
+            }
         }
+
+        // For fallback cases test the `tag` field and see if it's `err`,
+        // returning the `val` field in that case.
+        LuaVariant::Fallback(_) => {
+            let table = lua().convert::<mlua::Table>(val)?;
+            let tag: BorrowedStr<'_> = table.get("tag")?;
+            if tag == "err" {
+                table.get("val")?
+            } else {
+                return Ok(Value::Table(table));
+            }
+        }
+    };
+
+    let ty = match ty.err() {
+        Some(ty) => ty,
+        None => {
+            assert_eq!(error_value, Value::Nil);
+            return Err(mlua::Error::runtime(
+                "import function returned an err value",
+            ));
+        }
+    };
+
+    // TODO: this is the problem relative to the comment above. Here the error
+    // is either a `mlua::Error::runtime` which is just a string or it's
+    // converted to `mlua::Error` which I think just stringifies the value. I
+    // don't know how to raise a concrete value as an error. Ideally what would
+    // happen here is (a) for enum raise a userdata error which has a `code`
+    // accessor and a stringification method printing the human-readable name,
+    // or (b) the value itself is raised as an error.
+    //
+    // Maybe this is a use case for generating lua code and evaluating it...
+    match peel(ty) {
+        Type::Enum(e) => {
+            let discr = lua().convert::<usize>(&error_value)?;
+            let name = e.names().nth(discr - 1).unwrap();
+
+            Err(mlua::Error::runtime(format!(
+                "import function failed with error `{name}` (code {discr})"
+            )))
+        }
+        _other => lua().convert(error_value),
+    }
+}
+
+fn peel(ty: Type) -> Type {
+    match ty {
+        Type::Alias(ty) => peel(ty.ty()),
+        other => other,
     }
 }
 
@@ -283,7 +384,7 @@ fn typecheck(lua: &Lua, val: &Value, ty: Type) -> mlua::Result<()> {
         }
         Type::Enum(ty) => {
             let val = lua.convert::<usize>(val)?;
-            if val >= ty.names().len() {
+            if val == 0 || val > ty.names().len() {
                 return Err(mlua::Error::runtime("invalid enum discriminant"));
             }
         }
@@ -608,11 +709,11 @@ impl wit_dylib_ffi::Call for Call<'_> {
     }
 
     fn pop_enum(&mut self, _: Enum) -> u32 {
-        lua().unpack::<u32>(self.stack.pop().unwrap()).unwrap()
+        lua().unpack::<u32>(self.stack.pop().unwrap()).unwrap() - 1
     }
 
     fn push_enum(&mut self, _: Enum, val: u32) {
-        self.stack.push(lua().convert(val).unwrap());
+        self.stack.push(lua().convert(val + 1).unwrap());
     }
 
     fn pop_flags(&mut self, _: Flags) -> u32 {
@@ -732,23 +833,8 @@ impl Call<'_> {
             },
             LuaVariant::Payload(payloads) => {
                 for (i, ty) in payloads.iter().enumerate() {
-                    match (ty, &val) {
-                        (LuaType::Nil, Value::Nil)
-                        | (LuaType::Boolean, Value::Boolean(_))
-                        | (LuaType::Number, Value::Number(_))
-                        | (LuaType::String, Value::String(_))
-                        | (LuaType::Table, Value::Table(_))
-                        | (LuaType::UserData, Value::UserData(_))
-                        | (LuaType::UserData, Value::LightUserData(_)) => {
-                            return i as u32;
-                        }
-
-                        (LuaType::Nil, _)
-                        | (LuaType::Boolean, _)
-                        | (LuaType::Number, _)
-                        | (LuaType::String, _)
-                        | (LuaType::Table, _)
-                        | (LuaType::UserData, _) => {}
+                    if ty.matches(&val) {
+                        return i as u32;
                     }
                 }
                 unreachable!()
@@ -772,17 +858,19 @@ impl Call<'_> {
     }
 }
 
+#[derive(Debug)]
 enum LuaVariant {
     Nullable { null_discr: u32, some_ty: Type },
     Payload(Vec<LuaType>),
     Fallback(Vec<(&'static str, Option<Type>)>),
 }
 
-#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Hash, PartialEq, Eq, Debug)]
 enum LuaType {
     Nil,
     Boolean,
     Number,
+    Integer,
     String,
     Table,
     UserData,
@@ -843,10 +931,9 @@ impl LuaVariant {
             | Type::S32
             | Type::U64
             | Type::S64
-            | Type::F32
-            | Type::F64
             | Type::Enum(_)
-            | Type::Flags(_) => LuaType::Number,
+            | Type::Flags(_) => LuaType::Integer,
+            Type::F32 | Type::F64 => LuaType::Number,
 
             Type::Bool => LuaType::Boolean,
 
@@ -881,30 +968,19 @@ impl LuaVariant {
                 other => typecheck(lua, other, *some_ty),
             },
             LuaVariant::Payload(payloads) => {
+                let mut count = 0;
                 for ty in payloads {
-                    let ok = match (ty, val) {
-                        (LuaType::Nil, Value::Nil)
-                        | (LuaType::Boolean, Value::Boolean(_))
-                        | (LuaType::Number, Value::Number(_))
-                        | (LuaType::String, Value::String(_))
-                        | (LuaType::Table, Value::Table(_))
-                        | (LuaType::UserData, Value::UserData(_))
-                        | (LuaType::UserData, Value::LightUserData(_)) => true,
-
-                        (LuaType::Nil, _)
-                        | (LuaType::Boolean, _)
-                        | (LuaType::Number, _)
-                        | (LuaType::String, _)
-                        | (LuaType::Table, _)
-                        | (LuaType::UserData, _) => false,
-                    };
-                    if ok {
-                        return Ok(());
+                    if ty.matches(val) {
+                        count += 1;
                     }
                 }
-                Err(mlua::Error::runtime(
-                    "value does not match any payload type",
-                ))
+                if count == 0 {
+                    Err(mlua::Error::runtime(
+                        "value does not match any payload type",
+                    ))
+                } else {
+                    Ok(())
+                }
             }
             LuaVariant::Fallback(cases) => {
                 let table = lua.convert::<mlua::Table>(val)?;
@@ -963,6 +1039,29 @@ impl LuaVariant {
             LuaVariant::Nullable { .. } => true,
             LuaVariant::Payload(payloads) => payloads.contains(&LuaType::Nil),
             LuaVariant::Fallback(_) => false,
+        }
+    }
+}
+
+impl LuaType {
+    fn matches(&self, val: &Value) -> bool {
+        match (self, val) {
+            (LuaType::Nil, Value::Nil)
+            | (LuaType::Boolean, Value::Boolean(_))
+            | (LuaType::Number, Value::Number(_))
+            | (LuaType::Integer, Value::Integer(_))
+            | (LuaType::String, Value::String(_))
+            | (LuaType::Table, Value::Table(_))
+            | (LuaType::UserData, Value::UserData(_))
+            | (LuaType::UserData, Value::LightUserData(_)) => true,
+
+            (LuaType::Nil, _)
+            | (LuaType::Boolean, _)
+            | (LuaType::Number, _)
+            | (LuaType::Integer, _)
+            | (LuaType::String, _)
+            | (LuaType::Table, _)
+            | (LuaType::UserData, _) => false,
         }
     }
 }
