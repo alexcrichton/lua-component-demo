@@ -105,7 +105,7 @@ impl State {
         for ty in interface.enums.iter() {
             let luaty = self.lua.create_table()?;
             for (i, name) in ty.names().enumerate() {
-                luaty.set(name.to_upper_camel_case(), i + 1)?;
+                luaty.set(name.to_upper_camel_case(), i)?;
             }
             table.set(ty.name().to_upper_camel_case(), luaty)?;
         }
@@ -283,7 +283,7 @@ fn typecheck(lua: &Lua, val: &Value, ty: Type) -> mlua::Result<()> {
         }
         Type::Enum(ty) => {
             let val = lua.convert::<usize>(val)?;
-            if val == 0 || val > ty.names().len() {
+            if val >= ty.names().len() {
                 return Err(mlua::Error::runtime("invalid enum discriminant"));
             }
         }
@@ -483,7 +483,8 @@ impl wit_dylib_ffi::Call for Call<'_> {
             return false;
         }
         let val = unsafe { Vec::from_raw_parts(ptr, len, len) };
-        self.stack.push(lua().convert(val).unwrap());
+        self.stack
+            .push(lua().convert(mlua::String::wrap(val)).unwrap());
         true
     }
 
@@ -607,11 +608,11 @@ impl wit_dylib_ffi::Call for Call<'_> {
     }
 
     fn pop_enum(&mut self, _: Enum) -> u32 {
-        lua().unpack::<u32>(self.stack.pop().unwrap()).unwrap() - 1
+        lua().unpack::<u32>(self.stack.pop().unwrap()).unwrap()
     }
 
     fn push_enum(&mut self, _: Enum, val: u32) {
-        self.stack.push(lua().convert(val + 1).unwrap());
+        self.stack.push(lua().convert(val).unwrap());
     }
 
     fn pop_flags(&mut self, _: Flags) -> u32 {
