@@ -10,6 +10,7 @@ crate-type = ['cdylib']
 [dependencies]
 mlua = { version = "0.11.3", features = ['vendored'] }
 wit-dylib-ffi = { git = 'https://github.com/bytecodealliance/wasm-tools', default-features = false }
+heck = "0.5.0"
 
 [features]
 lua54 = ['mlua/lua54']

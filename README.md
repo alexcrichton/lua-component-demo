@@ -59,18 +59,18 @@ of `todo!()` there. Implemented features are:
 * Type conversions for lists
 * Type conversions for tuples
 * Type conversions for `option<T>`
+* WIT `variant` and `result` types.
+* WIT `record` type.
+* WIT `flags` type.
+* WIT `enum` type.
+* WIT `option<option<T>>` type.
 * Invoking world-exported functions
 * Raw bindings to call imported functions
+* Defining imports under an appropriate name (they're just `import1` right
+  now).
+* WIT imported resources
 
 Unimplemented features are:
 
-* [ ] Defining imports under an appropriate name (they're just `import1` right
-  now).
 * [ ] Exported functions of interfaces aren't supported.
-* [ ] WIT `variant` and `result` types.
-* [ ] WIT `record` type.
-* [ ] WIT `flags` type.
-* [ ] WIT `enum` type.
-* [ ] WIT `option<option<T>>` type.
 * [ ] WIT exported resources
-* [ ] WIT imported resources

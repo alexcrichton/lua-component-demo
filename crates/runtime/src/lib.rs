@@ -1,8 +1,10 @@
+use heck::*;
 use mlua::{BorrowedBytes, BorrowedStr, ErrorContext, Lua, UserDataMethods, Value};
 use std::alloc;
+use std::collections::HashMap;
 use std::mem;
 use std::num::NonZeroU32;
-use std::sync::LazyLock;
+use std::sync::{LazyLock, Mutex};
 use wit_dylib_ffi::{
     Enum, Flags, Function, Future, Interpreter, List, Record, Resource, Stream, Tuple, Type,
     Variant, Wit, WitOption, WitResult,
@@ -15,6 +17,7 @@ wit_dylib_ffi::export!(LuaWit);
 #[derive(Default)]
 struct State {
     lua: Lua,
+    resource_methods: Mutex<HashMap<Resource, HashMap<String, Function>>>,
 }
 
 fn state() -> &'static State {
@@ -47,6 +50,18 @@ impl mlua::UserData for LuaResource {
             this.drop_now();
             Ok(())
         });
+        methods.add_meta_method(mlua::MetaMethod::Index, |_, this, name: BorrowedStr<'_>| {
+            let state = state();
+            let resource_methods = state.resource_methods.lock().unwrap();
+            match resource_methods
+                .get(&this.ty)
+                .and_then(|m| m.get(&name[..]))
+                .copied()
+            {
+                Some(func) => state.lua.pack(mlua::Function::wrap(Import { func })),
+                None => Ok(mlua::Nil.into()),
+            }
+        });
     }
 }
 
@@ -58,24 +73,109 @@ impl Drop for LuaResource {
 
 impl State {
     fn initialize(&self, wit: Wit) -> mlua::Result<()> {
-        let imports = self.lua.create_table()?;
-        for (i, func) in wit.iter_funcs().enumerate() {
-            if !func.is_import() {
-                continue;
+        let imports = self.partition_imports(wit);
+        for (name, interface) in imports.iter() {
+            let table = self.create_interface(interface)?;
+            match name {
+                Some(name) => {
+                    if let Some(pos) = name.find('@') {
+                        let name = &name[..pos];
+                        self.lua.register_module(name, table.clone())?;
+                    }
+                    self.lua.register_module(name, table)?;
+                }
+                None => self.lua.globals().set("root", table)?,
             }
-            let func = mlua::Function::wrap(Import { func });
-            imports.set(format!("import{i}"), func)?;
         }
-
-        // TODO: define imports in a `require`-able module
-        // TODO: define enums as `Foo = { Name = 1, Other = 2 }`
-        // TODO: define flags as `Foo = { Name = 1<<0, Other = 1<<1 }`
-
-        self.lua.register_module("componentize_lua", imports)?;
 
         let file = std::fs::read_to_string("main.lua").expect("failed to read `main.lua`");
         self.lua.load(&file).exec()?;
         Ok(())
+    }
+
+    fn create_interface(&self, interface: &LuaInterface) -> mlua::Result<mlua::Table> {
+        let table = self.lua.create_table()?;
+        for ty in interface.flags.iter() {
+            let luaty = self.lua.create_table()?;
+            for (i, name) in ty.names().enumerate() {
+                luaty.set(name.to_upper_camel_case(), 1 << i)?;
+            }
+            table.set(ty.name().to_upper_camel_case(), luaty)?;
+        }
+        for ty in interface.enums.iter() {
+            let luaty = self.lua.create_table()?;
+            for (i, name) in ty.names().enumerate() {
+                luaty.set(name.to_upper_camel_case(), i + 1)?;
+            }
+            table.set(ty.name().to_upper_camel_case(), luaty)?;
+        }
+        for func in interface.funcs.iter().copied() {
+            table.set(
+                func.name().to_snake_case(),
+                mlua::Function::wrap(Import { func }),
+            )?;
+        }
+        let mut methods = self.resource_methods.lock().unwrap();
+        for (name, r) in interface.resources.iter() {
+            let resource = self.lua.create_table()?;
+            if let Some(ctor) = r.ctor {
+                resource.set("new", mlua::Function::wrap(Import { func: ctor }))?;
+            }
+            for (name, func) in r.statics.iter().copied() {
+                resource.set(name.to_snake_case(), mlua::Function::wrap(Import { func }))?;
+            }
+
+            for (name, func) in r.methods.iter().copied() {
+                let Type::Borrow(ty) = func.params().next().unwrap() else {
+                    unreachable!()
+                };
+                methods
+                    .entry(ty)
+                    .or_default()
+                    .insert(name.to_snake_case(), func);
+            }
+            table.set(name.to_upper_camel_case(), resource)?;
+        }
+        Ok(table)
+    }
+
+    fn partition_imports(&self, wit: Wit) -> HashMap<Option<&'static str>, LuaInterface> {
+        let mut ret: HashMap<_, LuaInterface> = HashMap::new();
+        for ty in wit.iter_flags() {
+            ret.entry(ty.interface()).or_default().flags.push(ty);
+        }
+        for ty in wit.iter_enums() {
+            ret.entry(ty.interface()).or_default().enums.push(ty);
+        }
+        for func in wit.iter_funcs() {
+            if !func.is_import() {
+                continue;
+            }
+            let interface = ret.entry(func.interface()).or_default();
+            let name = func.name();
+            if let Some(name) = name.strip_prefix("[constructor]") {
+                interface.resources.entry(name).or_default().ctor = Some(func);
+            } else if let Some(parts) = name.strip_prefix("[method]") {
+                let (r, name) = parts.split_once('.').unwrap();
+                interface
+                    .resources
+                    .entry(r)
+                    .or_default()
+                    .methods
+                    .push((name, func));
+            } else if let Some(parts) = name.strip_prefix("[static]") {
+                let (r, name) = parts.split_once('.').unwrap();
+                interface
+                    .resources
+                    .entry(r)
+                    .or_default()
+                    .statics
+                    .push((name, func));
+            } else {
+                interface.funcs.push(func);
+            };
+        }
+        ret
     }
 
     fn call_export(&self, _wit: Wit, func: Function, cx: &mut Call<'_>) -> mlua::Result<()> {
@@ -93,6 +193,21 @@ impl State {
         }
         Ok(())
     }
+}
+
+#[derive(Default)]
+struct LuaInterface {
+    flags: Vec<Flags>,
+    enums: Vec<Enum>,
+    funcs: Vec<Function>,
+    resources: HashMap<&'static str, LuaResourceFunctions>,
+}
+
+#[derive(Default)]
+struct LuaResourceFunctions {
+    ctor: Option<Function>,
+    methods: Vec<(&'static str, Function)>,
+    statics: Vec<(&'static str, Function)>,
 }
 
 struct Import {
@@ -226,7 +341,7 @@ impl Interpreter for LuaWit {
 
     fn initialize(wit: Wit) {
         if let Err(e) = state().initialize(wit) {
-            eprintln!("failed to initialize: {e}");
+            eprintln!("{e}");
             std::process::exit(1);
         }
     }
@@ -237,7 +352,8 @@ impl Interpreter for LuaWit {
 
     fn export_call(wit: Wit, func: Function, cx: &mut Self::CallCx<'_>) {
         if let Err(e) = state().call_export(wit, func, cx) {
-            panic!("failed to call export: {e}");
+            eprintln!("{e}");
+            std::process::exit(1);
         }
     }
 

@@ -283,6 +283,7 @@ dependencies = [
 name = "lua-component-runtime"
 version = "0.1.0"
 dependencies = [
+ "heck",
  "mlua",
  "wit-dylib-ffi",
 ]
