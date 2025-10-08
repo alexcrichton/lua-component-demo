@@ -546,14 +546,15 @@ checksum = "06abde3611657adf66d383f00b093d7faecc7fa57071cce2578660c9f1010821"
 
 [[package]]
 name = "wasi-preview1-component-adapter-provider"
-version = "36.0.2"
+version = "37.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4da2ec25ddcaf86d98cd2e1928af72963bc24318cf22fee36c61953bc5fd9f28"
+checksum = "8d0fcd636ad2b29a7c0490799a23ad61d1c8dedfafdb970447fddd0549502b60"
 
 [[package]]
 name = "wasm-encoder"
-version = "0.239.0"
-source = "git+https://github.com/bytecodealliance/wasm-tools#3c064458fd95e39243d3aaab59e748ecc1d127b9"
+version = "0.240.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "06d642d8c5ecc083aafe9ceb32809276a304547a3a6eeecceb5d8152598bc71f"
 dependencies = [
  "leb128fmt",
  "wasmparser",
@@ -561,8 +562,9 @@ dependencies = [
 
 [[package]]
 name = "wasm-metadata"
-version = "0.239.0"
-source = "git+https://github.com/bytecodealliance/wasm-tools#3c064458fd95e39243d3aaab59e748ecc1d127b9"
+version = "0.240.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ee093e1e1ccffa005b9b778f7a10ccfd58e25a20eccad294a1a93168d076befb"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -572,8 +574,9 @@ dependencies = [
 
 [[package]]
 name = "wasmparser"
-version = "0.239.0"
-source = "git+https://github.com/bytecodealliance/wasm-tools#3c064458fd95e39243d3aaab59e748ecc1d127b9"
+version = "0.240.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b722dcf61e0ea47440b53ff83ccb5df8efec57a69d150e4f24882e4eba7e24a4"
 dependencies = [
  "bitflags",
  "hashbrown 0.15.5",
@@ -754,8 +757,9 @@ checksum = "d135d17ab770252ad95e9a872d365cf3090e3be864a34ab46f48555993efc904"
 
 [[package]]
 name = "wit-component"
-version = "0.239.0"
-source = "git+https://github.com/bytecodealliance/wasm-tools#3c064458fd95e39243d3aaab59e748ecc1d127b9"
+version = "0.240.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7dc5474b078addc5fe8a72736de8da3acfb3ff324c2491133f8b59594afa1a20"
 dependencies = [
  "anyhow",
  "bitflags",
@@ -772,8 +776,9 @@ dependencies = [
 
 [[package]]
 name = "wit-dylib"
-version = "0.239.0"
-source = "git+https://github.com/bytecodealliance/wasm-tools#3c064458fd95e39243d3aaab59e748ecc1d127b9"
+version = "0.240.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c5e941415b61acf6b2f721268537b365c605e71ce925816efa87590ab0951df4"
 dependencies = [
  "anyhow",
  "indexmap",
@@ -788,8 +793,9 @@ source = "git+https://github.com/bytecodealliance/wasm-tools#3c064458fd95e39243d
 
 [[package]]
 name = "wit-parser"
-version = "0.239.0"
-source = "git+https://github.com/bytecodealliance/wasm-tools#3c064458fd95e39243d3aaab59e748ecc1d127b9"
+version = "0.240.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9875ea3fa272f57cc1fc50f225a7b94021a7878c484b33792bccad0d93223439"
 dependencies = [
  "anyhow",
  "id-arena",
